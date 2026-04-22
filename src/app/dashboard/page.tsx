@@ -16,12 +16,23 @@ export default function Dashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomTag, setNewRoomTag] = useState('');
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [selectedProfile, setSelectedProfile] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
       router.push('/');
     }
   }, [user, authLoading, router]);
+
+  useEffect(() => {
+    if (user && !user.user_metadata?.target_profile) {
+      setIsProfileModalOpen(true);
+    } else if (user?.user_metadata?.target_profile) {
+      setIsProfileModalOpen(false);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (user) {
@@ -54,6 +65,23 @@ export default function Dashboard() {
       router.push(`/room/${data.id}`);
     } catch (error) {
       console.error('Error creating room:', error);
+    }
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProfile) return;
+    setSavingProfile(true);
+    try {
+      const { data, error } = await supabase.auth.updateUser({
+        data: { target_profile: selectedProfile }
+      });
+      if (error) throw error;
+      setIsProfileModalOpen(false);
+    } catch (error) {
+      console.error('Error updating profile:', error);
+    } finally {
+      setSavingProfile(false);
     }
   };
 
@@ -113,6 +141,43 @@ export default function Dashboard() {
           </button>
         </header>
 
+        {userProfile?.target_profile && (
+          <div className="mb-12">
+            <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+              <span className="text-emerald-500">✨</span> Recommended for {userProfile.target_profile}
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {rooms
+                .filter(r => r.name.toLowerCase().includes(userProfile.target_profile.toLowerCase()) || r.tag?.toLowerCase().includes(userProfile.target_profile.toLowerCase()))
+                .map((room) => (
+                  <RoomCard 
+                    key={room.id} 
+                    room={room} 
+                    currentUserId={user?.id}
+                    onClick={() => router.push(`/room/${room.id}`)} 
+                    onDelete={async (e) => {
+                      e.stopPropagation();
+                      if (confirm('Are you sure you want to delete this room?')) {
+                        try {
+                          await supabase.from('rooms').delete().eq('id', room.id);
+                          useRoomStore.getState().setRooms(useRoomStore.getState().rooms.filter(r => r.id !== room.id));
+                        } catch (error: any) {
+                          alert('Failed to delete room. Error: ' + error.message);
+                        }
+                      }
+                    }}
+                  />
+              ))}
+              {rooms.filter(r => r.name.toLowerCase().includes(userProfile.target_profile.toLowerCase()) || r.tag?.toLowerCase().includes(userProfile.target_profile.toLowerCase())).length === 0 && (
+                <div className="col-span-full py-8 text-center bg-white/5 rounded-3xl border border-white/5">
+                  <p className="text-gray-500 text-sm">No specific rooms found for your profile. Create one to get started!</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <h2 className="text-xl font-bold mb-4">All Rooms</h2>
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {rooms.map((room) => (
             <RoomCard 
@@ -203,6 +268,58 @@ export default function Dashboard() {
                     className="flex-1 px-6 py-3 rounded-2xl bg-emerald-500 text-black font-bold hover:bg-emerald-400 transition-all"
                   >
                     Launch
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Profile Setup Modal */}
+      <AnimatePresence>
+        {isProfileModalOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 sm:p-0">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/90 backdrop-blur-md"
+            ></motion.div>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-lg glass p-8 md:p-10 rounded-[2rem] shadow-2xl border border-emerald-500/20"
+            >
+              <h2 className="text-3xl font-black mb-2 text-center">What are you studying for?</h2>
+              <p className="text-gray-400 text-center mb-8">This helps us recommend the best focus rooms for you.</p>
+              
+              <form onSubmit={handleSaveProfile} className="space-y-6">
+                <div className="grid grid-cols-2 gap-3">
+                  {['JEE', 'NEET', 'UPSC', 'CA / CS', 'Working Professional', 'Other'].map(profile => (
+                    <button
+                      key={profile}
+                      type="button"
+                      onClick={() => setSelectedProfile(profile)}
+                      className={`py-4 px-4 rounded-2xl border-2 transition-all font-bold ${
+                        selectedProfile === profile 
+                        ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500' 
+                        : 'border-white/10 bg-white/5 text-gray-300 hover:border-white/30'
+                      }`}
+                    >
+                      {profile}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="pt-4">
+                  <button
+                    type="submit"
+                    disabled={!selectedProfile || savingProfile}
+                    className="w-full py-4 rounded-2xl bg-emerald-500 text-black font-black text-lg hover:bg-emerald-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-emerald-500/20"
+                  >
+                    {savingProfile ? 'Saving...' : 'Lock In'}
                   </button>
                 </div>
               </form>

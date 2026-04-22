@@ -201,16 +201,35 @@ export default function RoomPage() {
         user_id: user.id, 
         minutes: selectedDuration 
       });
+
+      await supabase.from('focus_sessions').insert({
+        user_id: user.id,
+        room_name: room?.name || 'Unknown Room',
+        duration: selectedDuration,
+        status: 'completed'
+      });
     }
   };
 
-  const handleBreak = () => {
+  const handleBreak = async () => {
     if (myStatus === 'Locked In') {
       if (confirm('Are you sure? Your streak will reset and session will fail.')) {
+        const remainingMinutes = Math.ceil(timeLeft / 60);
+        const durationPassed = selectedDuration - remainingMinutes;
+        
         setMyStatus('Break');
         setTimeLeft(0);
         endTimeRef.current = null;
         addSignal(`${user?.user_metadata.full_name} left early 💀`, 'fail');
+
+        if (user) {
+          await supabase.from('focus_sessions').insert({
+            user_id: user.id,
+            room_name: room?.name || 'Unknown Room',
+            duration: durationPassed > 0 ? durationPassed : 1,
+            status: 'failed'
+          });
+        }
       }
     } else {
       setMyStatus(myStatus === 'Break' ? 'Idle' : 'Break');
