@@ -121,6 +121,36 @@ export default function RoomPage() {
     }
   }, [myStatus, timeLeft, user]);
 
+  const addSignal = (msg: string, type: 'success' | 'fail' | 'info' | 'warn') => {
+    const id = Math.random().toString(36).substr(2, 9);
+    setSignals((prev) => [{ id, msg, type }, ...prev].slice(0, 5));
+    setTimeout(() => {
+      setSignals((prev) => prev.filter((s) => s.id !== id));
+    }, 5000);
+  };
+
+  const handleSessionComplete = async () => {
+    setMyStatus('Idle');
+    setTimeLeft(0);
+    endTimeRef.current = null;
+    addSignal(`${user?.user_metadata.full_name} completed a session ✅`, 'success');
+    
+    // Update Profile in Supabase
+    if (user) {
+      await supabase.rpc('increment_focus_stats', { 
+        user_id: user.id, 
+        minutes: selectedDuration 
+      });
+
+      await supabase.from('focus_sessions').insert({
+        user_id: user.id,
+        room_name: room?.name || 'Unknown Room',
+        duration: selectedDuration,
+        status: 'completed'
+      });
+    }
+  };
+
   // 4. Timer Logic (Background Proof via Web Worker)
   useEffect(() => {
     let worker: Worker | null = null;
@@ -158,11 +188,6 @@ export default function RoomPage() {
       };
       worker.postMessage('start');
 
-    } else {
-      if (worker) {
-        worker.postMessage('stop');
-        worker.terminate();
-      }
     }
 
     return () => {
@@ -173,42 +198,12 @@ export default function RoomPage() {
     };
   }, [myStatus]);
 
-  const addSignal = (msg: string, type: 'success' | 'fail' | 'info' | 'warn') => {
-    const id = Math.random().toString(36).substr(2, 9);
-    setSignals((prev) => [{ id, msg, type }, ...prev].slice(0, 5));
-    setTimeout(() => {
-      setSignals((prev) => prev.filter((s) => s.id !== id));
-    }, 5000);
-  };
-
   const handleLockIn = () => {
     const durationMs = selectedDuration * 60 * 1000;
     endTimeRef.current = Date.now() + durationMs;
     setTimeLeft(selectedDuration * 60);
     setMyStatus('Locked In');
     addSignal(`${user?.user_metadata.full_name} just locked in 🔥`, 'info');
-  };
-
-  const handleSessionComplete = async () => {
-    setMyStatus('Idle');
-    setTimeLeft(0);
-    endTimeRef.current = null;
-    addSignal(`${user?.user_metadata.full_name} completed a session ✅`, 'success');
-    
-    // Update Profile in Supabase
-    if (user) {
-      await supabase.rpc('increment_focus_stats', { 
-        user_id: user.id, 
-        minutes: selectedDuration 
-      });
-
-      await supabase.from('focus_sessions').insert({
-        user_id: user.id,
-        room_name: room?.name || 'Unknown Room',
-        duration: selectedDuration,
-        status: 'completed'
-      });
-    }
   };
 
   const handleBreak = async () => {
